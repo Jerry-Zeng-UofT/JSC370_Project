@@ -1,0 +1,500 @@
+---
+title: "JSC370_Project_Midterm"
+format:
+  html:
+    embed-resources: true
+jupyter: python3
+---
+
+## 1. Introduction
+
+- This dataset, the Neighbourhood Crime Rates dataset, is from the City of Toronto Open Data Portal. The portal is the City’s official open data source (https://www.toronto.ca/city-government/data-research-maps/open-data/), and this dataset contains crime data by neighbourhood. In the data table, each row represents one Toronto neighbourhood, and the columns describe different neighbourhood-level crime measures. 'This dataset includes the Crime Data by Neighbourhood. Counts are available for Assault, Auto Theft, Break and Enter, Robbery, Theft Over, Homicide and Shooting & Firearm Discharges. Data also includes the crime rate per 100,000 population calculated using the population estimates provided by Environics Analytics.' quoted from https://open.toronto.ca/dataset/neighbourhood-crime-rates/, the dataset description page. 
+
+- Questions to be answered in this project (WIP):
+    1. How much do recorded crime rates vary across Toronto neighbourhoods?
+    2. Which offence categories show the greatest neighbourhood-to-neighbourhood variation?
+    3. Do neighbourhoods with high values in one offence category also tend to have high values in others?
+    4. Do crime counts and crime rates tell the same story across neighbourhoods?
+    5. etc. (pending)
+
+## 2. Data Acquisition and library imports
+
+```{python}
+import requests
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import re
+from itertools import combinations
+from scipy.stats import spearmanr
+from statsmodels.stats.multitest import multipletests
+from itertools import combinations
+from scipy.stats import pearsonr
+```
+
+```{python}
+base_url = "https://ckan0.cf.opendata.inter.prod-toronto.ca"
+
+# Developer code given by dataset website 
+package = requests.get(
+    base_url + "/api/3/action/package_show",
+    params={"id": "neighbourhood-crime-rates"}
+).json()
+
+resource_id = None
+for resource in package["result"]["resources"]:
+    if resource["datastore_active"]:
+        resource_id = resource["id"]
+        print("Using resource:", resource["name"])
+        print("Resource ID:", resource_id)
+        break
+
+if resource_id is None:
+    raise ValueError("No datastore_active resource found.")
+
+dump_url = f"{base_url}/datastore/dump/{resource_id}"
+df = pd.read_csv(dump_url)
+
+# print(df.head())
+# print(df.shape)
+print(df.columns.tolist())
+```
+
+- The dataset doesnt contain a metadata file for detailed data description. However, the column names are mostly self-explanatory. 
+
+## 3. EDA
+
+```{python}
+# Basic inspection
+print("Shape:", df.shape)
+
+print("\nData types:")
+print(df.dtypes)
+```
+
+- From the basic inspection, we see that the dataset has 158 rows and 221 columns. From the first 5 rows we can basically see that each row represents a neighbourhood, and the columns include the neighbourhood name, population counts for different years, and crime counts and rates for different offence categories and years.
+
+```{python}
+print("\nMissing values in each column:")
+missing = df.isna().sum()
+missing = missing[missing > 0]
+
+print(missing.to_string())
+```
+
+- Some columns have too many missing values that affect the later comparison. My current rule of dealling with them is: If a type of crime consist 50+ of missing value in any of the year, drop the columns regarding that kind of crime, including all years, and including rate. After that, for the rest of the columns, drop rows with missing values.
+
+```{python}
+missing_threshold = 50
+
+col_map = {col: col.lower() for col in df.columns}
+
+crime_types = sorted({
+    re.match(r"^(.*)_rate_\d{4}$", lower_col).group(1)
+    for lower_col in col_map.values()
+    if re.match(r"^(.*)_rate_\d{4}$", lower_col)
+})
+
+crime_cols = {}
+
+for crime in crime_types:
+    pattern = re.compile(rf"^{re.escape(crime)}(_rate)?_\d{{4}}$")
+    matched_original_cols = [
+        orig_col
+        for orig_col, lower_col in col_map.items()
+        if pattern.match(lower_col)
+    ]
+    crime_cols[crime] = matched_original_cols
+
+crime_summary = []
+crime_types_to_drop = []
+
+for crime, cols in crime_cols.items():
+    if not cols:
+        continue
+
+    missing_counts = df[cols].isna().sum()
+    max_missing = int(missing_counts.max())
+    worst_col = missing_counts.idxmax()
+
+    crime_summary.append({
+        "crime_type": crime,
+        "max_missing_in_any_column": max_missing,
+        "worst_column": worst_col,
+        "drop_this_crime": max_missing >= missing_threshold
+    })
+
+    if max_missing >= missing_threshold:
+        crime_types_to_drop.append(crime)
+
+crime_summary = pd.DataFrame(crime_summary)
+
+if not crime_summary.empty:
+    crime_summary = crime_summary.sort_values(
+        "max_missing_in_any_column", ascending=False
+    )
+
+print("\nCrime summary:")
+print(crime_summary.to_string(index=False))
+
+cols_to_drop = sorted([
+    col
+    for crime in crime_types_to_drop
+    for col in crime_cols[crime]
+])
+
+print("\nCrime types to drop:")
+print(crime_types_to_drop)
+
+print("\nColumns to drop:")
+print(cols_to_drop)
+
+df = df.drop(columns=cols_to_drop).copy()
+
+print("\nShape before dropping remaining NA rows:", df_clean.shape)
+df_clean = df_clean.dropna().reset_index(drop=True)
+print("Shape after dropping remaining NA rows:", df_clean.shape)
+```
+
+- 60 columns are dropped because they have 50+ missing values, and after that, 60 rows are dropped because of remaining missing values. The dataset now have shape of (98, 173).
+
+```{python}
+# Data wrangling - check for duplicated neighbourhood names
+print("\nNumber of duplicated rows:")
+print(df.duplicated().sum())
+
+print("New shape:", df.shape)
+```
+
+- There are no duplicated eighbourhood nor duplicated rows in the dataset.
+
+```{python}
+# Data wrangling - clean column names
+df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+
+print(df.columns.tolist())
+```
+
+```{python}
+# Data cleaning - check for negative values in numeric columns
+
+numeric_cols = df.select_dtypes(include="number").columns
+
+for col in numeric_cols:
+    if (df[col] < 0).any():
+        print(f"{col} has negative values")
+```
+
+- One of the impossible value is any negative value in the crime counts or crime rates. Nothing is printed, so there isnt any. 
+
+```{python}
+# Data cleaning - check for outliers using IQR method
+numeric_cols = df.select_dtypes(include="number").columns
+
+for col in numeric_cols:
+    Q1 = df[col].quantile(0.25)
+    Q3 = df[col].quantile(0.75)
+    IQR = Q3 - Q1
+    
+    lower = Q1 - 1.5 * IQR
+    upper = Q3 + 1.5 * IQR
+    
+    outliers = df[(df[col] < lower) | (df[col] > upper)]
+    
+    print(f"{col}: {len(outliers)} outliers")
+```
+
+- Using the IQR method, we can see that many columns have outliers. I think this is expected for crime data, because it can vary widely across neighbourhoods. My current plan is to keep these outliers to aviod being baised in anaylsis. besides, these outliers do mean that the dataset is probabily skewed.
+
+## 4. Tables of summary statistics
+
+```{python}
+# Set up for the graphs and tables
+sns.set_theme(style="whitegrid")
+
+year = 2025
+neighbourhood_col = "area_name"
+
+# Find all rate columns for the chosen year
+rate_cols = [col for col in df.columns if col.endswith(f"_rate_{year}")]
+print(rate_cols)
+
+# Extract offence names from rate columns
+offences = [col.replace(f"_rate_{year}", "") for col in rate_cols]
+
+print("Offences available for", year)
+print(offences)
+
+df['overall_rate_col'] = df[rate_cols].sum(axis=1)
+```
+
+```{python}
+# Table 1: Dataset overview
+all_rate_years = sorted({
+    int(re.search(r"_rate_(\d{4})$", col).group(1))
+    for col in df.columns
+    if re.search(r"_rate_(\d{4})$", col)
+})
+
+population_cols = [col for col in df.columns if re.fullmatch(r"population_\d{4}", col)]
+population_years = sorted(int(col.split("_")[-1]) for col in population_cols)
+latest_population_year = max(population_years) if population_years else None
+
+table1 = pd.DataFrame({
+    "metric": [
+        "number of neighbourhoods",
+        "years covered",
+        "latest population year used",
+        "offence categories included",
+        "number of missing values after cleaning",
+    ],
+    "value": [
+        df[neighbourhood_col].nunique(),
+        f"{min(all_rate_years)}–{max(all_rate_years)}" if all_rate_years else "N/A",
+        latest_population_year,
+        ", ".join(offences),
+        int(df.isna().sum().sum()),
+    ]
+})
+
+table1
+```
+
+- Table 1 shows some baisc info abou the dataset after the EDA process. There are 98 neighbouhoods left, after we reach the 0 missing value. The dataset covers crime from 2014 to 2025. Since the most recent one is 2025, I will use data in this year for comparison between categories.
+
+```{python}
+# Table 2: Summary statistics for latest-year rates
+table2 = pd.DataFrame({
+    "offence": [col.replace(f"_rate_{year}", "") for col in rate_cols],
+    "mean": df[rate_cols].mean().values,
+    "sd": df[rate_cols].std().values,
+    "median": df[rate_cols].median().values,
+    "iqr": (df[rate_cols].quantile(0.75) - df[rate_cols].quantile(0.25)).values,
+    "min": df[rate_cols].min().values,
+    "max": df[rate_cols].max().values
+})
+
+table2["cv"] = table2["sd"] / table2["mean"]
+
+table2
+```
+
+- Table 2 concentrates on the data in 2025. As shown, assault has the highest mean rate across all neighbourhoods (874.94), and theftover is the lowest (63.19). The gap is very large. Also the max and min for every common crime vary alot. Take biketheft as an example, the min rate is only 4.51 and the max reaches 822.28. This difference may tell us some fact about how crime rate varys across neighborhoods, but more accurate conclusion should be drawn after wee the whole visualization.  
+
+```{python}
+# Table 3: Top 10 and bottom 10 by overall crime rate
+
+top10 = (
+    df[[neighbourhood_col, 'overall_rate_col']]
+    .sort_values('overall_rate_col', ascending=False)
+    .head(10)
+    .reset_index(drop=True)
+)
+top10.index = top10.index + 1
+top10.columns = ["top_neighbourhood", "top_rate"]
+
+bottom10 = (
+    df[[neighbourhood_col, 'overall_rate_col']]
+    .sort_values('overall_rate_col', ascending=True)
+    .head(10)
+    .reset_index(drop=True)
+)
+bottom10.index = bottom10.index + 1
+bottom10.columns = ["bottom_neighbourhood", "bottom_rate"]
+
+table3 = pd.concat([top10, bottom10], axis=1)
+
+table3
+
+```
+
+## 5. Visualizations 
+
+```{python}
+# ranked dot plot of one important rate
+
+overall_rate_col = 'overall_rate_col'  
+
+top20 = (
+    df[['area_name', overall_rate_col]]
+    .sort_values(overall_rate_col, ascending=False)
+    .head(20)
+    .sort_values(overall_rate_col, ascending=True)
+)
+
+plt.figure(figsize=(10, 8))
+plt.barh(top20['area_name'], top20[overall_rate_col])
+plt.xlabel('Crime rate per 100,000')
+plt.ylabel('Neighbourhood')
+plt.title('Top 20 Toronto Neighbourhoods by Crime Rate (overall)')
+plt.tight_layout()
+plt.show()
+```
+
+- With this bar plot and the above statistic table, we can give a clear answer to my first question: How much do recorded crime rates vary across Toronto neighbourhoods? - very significant. The trend is also interesting: below the 10th, Kennedy park, the rates dont differ too much, but as you go up, it increases sharply. The top1, Younge-Bay Corridor (about 5800) has more than twice of the aggregated crime rate than the top10, Kennedy park (about 2500). 
+
+```{python}
+# side-by-side boxplots of offence rates
+box_df = df[rate_cols].melt(var_name="offence", value_name="rate")
+box_df["offence"] = box_df["offence"].str.replace(f"_rate_{year}", "", regex=False)
+
+plt.figure(figsize=(12, 7))
+sns.boxplot(data=box_df, x="offence", y="rate")
+plt.xlabel("Offence category")
+plt.ylabel("Crime rate per 100,000")
+plt.title(f"Distribution of Neighbourhood Crime Rates by Offence Type ({year})")
+plt.xticks(rotation=45, ha="right")
+plt.tight_layout()
+plt.show()
+```
+
+- The boxplot above shows that crime rates differ by offence type across neighbourhoods. Assault has the highest typical rate while bike theft and theft over are generally lower. 
+
+- It also provide some evidence that answers question 2: Which offence categories show the greatest neighbourhood-to-neighbourhood variation?. From the boxploy, Categories with a wider box, longer whiskers, and more extreme outliers show more variation across neighbourhoods. From this graph, assault appears to have the greatest variation, including alot of extreme outliers and a very wide box, whereas robbery and theftover are lower overall.
+
+```{python}
+# correlation heatmap of offence rates
+heatmap_df = df[[f"{off}_rate_{year}" for off in offences]].copy()
+
+corr = heatmap_df.corr()
+
+plt.figure(figsize=(8, 6))
+sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f")
+plt.title(f"Correlation among offence rates ({year})")
+plt.tight_layout()
+plt.show()
+```
+
+- The heatmap shows the correlation between these crime type in 2025. We can see most of them are possily correlated, but not strongly. Some of them have strong correlation like breakenter and bike theft. 
+
+- This is my first try for answering question 3: 'Do neighbourhoods with high values in one offence category also tend to have high values in others?' However, with only correlations, we cannot draw a clear conclusion. 
+
+```{python}
+# scatterplot of the strongest correlated pair
+corr_abs = corr.abs().copy()
+
+for i in range(len(corr_abs)):
+    corr_abs.iloc[i, i] = 0
+
+best_pair = corr_abs.stack().idxmax()
+x_col, y_col = best_pair
+
+plt.figure(figsize=(7, 5))
+sns.scatterplot(data=df, x=x_col, y=y_col)
+plt.title(f"Scatterplot of strongest rate pair ({year})")
+plt.xlabel(x_col)
+plt.ylabel(y_col)
+plt.tight_layout()
+plt.show()
+
+print("Strongest pair:", x_col, "and", y_col)
+print("Correlation:", corr.loc[x_col, y_col])
+```
+
+- The scatterplot shows the relationship between breakenter and biketheft rates, which are the two with highest correlation. Even we see some likely linear relationship, we cannot guarantee a clear relationship without extra statistical evidence.
+
+```{python}
+# compare counts and rates for one offence
+if "assault" in offences:
+    compare_offence = "assault"
+else:
+    compare_offence = offences[0]
+
+count_col = f"{compare_offence}_{year}"
+rate_col = f"{compare_offence}_rate_{year}"
+
+top_n = 15
+
+count_rank = (
+    df[[neighbourhood_col, count_col]]
+    .dropna()
+    .sort_values(by=count_col, ascending=True)
+    .tail(top_n)
+)
+
+rate_rank = (
+    df[[neighbourhood_col, rate_col]]
+    .dropna()
+    .sort_values(by=rate_col, ascending=True)
+    .tail(top_n)
+)
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 8))
+
+axes[0].barh(count_rank[neighbourhood_col], count_rank[count_col])
+axes[0].set_title(f"Top {top_n} by {compare_offence} count ({year})")
+axes[0].set_xlabel("Count")
+
+axes[1].barh(rate_rank[neighbourhood_col], rate_rank[rate_col])
+axes[1].set_title(f"Top {top_n} by {compare_offence} rate ({year})")
+axes[1].set_xlabel("Rate")
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+# a simpler count-vs-rate scatterplot
+plt.figure(figsize=(7, 5))
+sns.scatterplot(data=df, x=count_col, y=rate_col)
+plt.title(f"{compare_offence}: count vs rate ({year})")
+plt.xlabel("Count")
+plt.ylabel("Rate")
+plt.tight_layout()
+plt.show()
+```
+
+- The two bar plots shows a comparsion between crime counts rank and crime rates rank, for a specific categroy, assault. From this we can see that not all of them matches! Moss park has the 2nd highest assault count but 4th highest in assault rate. This suggests that Crime counts and crime rates may not always align, and the population may have a high effect. However, this is only a specific crime in a specific year, and most of them, although dont match in rank, appear on both plots. More statistical evidence is required to answer question 4: 'Do crime counts and crime rates tell the same story across neighbourhoods?'
+ 
+## 6. Hypothesis testing
+
+- Since for question 3 and 4, I cannot draw clear conclusions from the visualizations and the tables, Hypothesis test may help.
+
+- H0: no linear association between the two offence rates
+- H1: there is a linear association
+
+- I am using the pearson r as statistic similar to linear regression analysis
+
+```{python}
+q3_results = []
+
+for col1, col2 in combinations(rate_cols, 2):
+    x = np.log1p(df[col1])   # log(1+x)
+    y = np.log1p(df[col2])
+    
+    r, p = pearsonr(x, y)
+    
+    q3_results.append({
+        "offence_1": col1.replace(f"_rate_{year}", ""),
+        "offence_2": col2.replace(f"_rate_{year}", ""),
+        "pearson_r": r,
+        "p_value": p
+    })
+
+q3_results = pd.DataFrame(q3_results).sort_values("p_value", ascending=False).round(3)
+q3_results
+```
+
+- As shown in the result table, which is sorted by p_values, Most of the offences do have a linear relationship with other offences, except the assault-autotheft pair, autotheft-breakenter pair and the biketheft-theftfrommv pair when using the critical value of alpha-0.05 and the rejection rule of p_value >= alpha. 
+
+## Summary of current findings
+
+- After the above process, some of the questions can be answered with the facts found from the dataset (with tables, visualizations or hypothesis test): the recorded crime rate is very different across different neighborhoods. Moreover, assault shows the greatest neighbourhood-to-neighbourhood variation (Some place has alot, some place has very few). Crimes are somewhat linear related, meaning that having alot of crime in one type often means other kinds are also common. High counts in crime often means high rate, but not guaranteed. Population may make the storytelling of crime count and crime rate different. 
+
+- There are also some interesting fact about the dataset per se: quite a lot of missing values (may lead to misleading conclusions), long time coverage (2014-2025), etc.
+
+## Plan for the final project 
+
+- I believe with ML and interactive visualization, I should come up with more interesting questions that can be answered with this dataset. Or, I should use more statistical way to prove and support my current conclusions of existing questions. 
+
+- 1. First thing to do is to adjust the dataset that works better with model training.
+
+- 2. The dataset covers very long range of time (2014-2025), so I will build a supervised learning models, such as regression and classification. I can use data from previous years to train the model, and use that of the later years to test. It could answer questions like: 'Can past crime patterns predict whether a neighbourhood will be high-risk next year?'
+
+- 3. I will apply unsupervised learning methods such as clustering and PCA to identify common neighbourhood crime profiles and study whether crime categories tend to occur together.
+
+- 4. I will build an interactive website to present the project. Now the visualizations focus on only 2025. I can make it interactive so the reader can switch between different years and see the difference. Also, I can apply other filters like count/rate filter, or offence categories filter.
+
+- 5. Apply some design. Since we are using website to present information, I will apply some design to make the website looks cooler and more attractive. 
+
