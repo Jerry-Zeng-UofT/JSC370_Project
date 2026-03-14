@@ -152,9 +152,9 @@ print(cols_to_drop)
 
 df = df.drop(columns=cols_to_drop).copy()
 
-print("\nShape before dropping remaining NA rows:", df_clean.shape)
-df_clean = df_clean.dropna().reset_index(drop=True)
-print("Shape after dropping remaining NA rows:", df_clean.shape)
+print("\nShape before dropping remaining NA rows:", df.shape)
+df_clean = df.dropna().reset_index(drop=True)
+print("Shape after dropping remaining NA rows:", df.shape)
 ```
 
 - 60 columns are dropped because they have 50+ missing values, and after that, 60 rows are dropped because of remaining missing values. The dataset now have shape of (98, 173).
