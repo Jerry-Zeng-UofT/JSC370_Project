@@ -17,6 +17,8 @@ jupyter: python3
     4. Do crime counts and crime rates tell the same story across neighbourhoods?
     5. etc. (pending)
 
+- Link to the github repo: https://github.com/Jerry-Zeng-UofT/JSC370_Project
+
 ## 2. Data Acquisition and library imports
 
 ```{python}
