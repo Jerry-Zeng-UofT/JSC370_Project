@@ -76,11 +76,11 @@ print(df.dtypes)
 - From the basic inspection, we see that the dataset has 158 rows and 221 columns. From the first 5 rows we can basically see that each row represents a neighbourhood, and the columns include the neighbourhood name, population counts for different years, and crime counts and rates for different offence categories and years.
 
 ```{python}
-print("\nMissing values in each column:")
+print("\nMissing values in each column: (omitted for clean report)")
 missing = df.isna().sum()
 missing = missing[missing > 0]
 
-print(missing.to_string())
+# print(missing.to_string())
 ```
 
 - Some columns have too many missing values that affect the later comparison. My current rule of dealling with them is: If a type of crime consist 50+ of missing value in any of the year, drop the columns regarding that kind of crime, including all years, and including rate. After that, for the rest of the columns, drop rows with missing values.
@@ -152,9 +152,9 @@ print(cols_to_drop)
 
 df = df.drop(columns=cols_to_drop).copy()
 
-print("\nShape before dropping remaining NA rows:", df.shape)
+print("\nShape before dropping remaining null rows:", df.shape)
 df_clean = df.dropna().reset_index(drop=True)
-print("Shape after dropping remaining NA rows:", df.shape)
+print("Shape after dropping remaining null rows:", df.shape)
 ```
 
 - 60 columns are dropped because they have 50+ missing values, and after that, 60 rows are dropped because of remaining missing values. The dataset now have shape of (98, 173).
@@ -202,7 +202,8 @@ for col in numeric_cols:
     
     outliers = df[(df[col] < lower) | (df[col] > upper)]
     
-    print(f"{col}: {len(outliers)} outliers")
+    # print(f"{col}: {len(outliers)} outliers")
+    print("output omitted for clean report")
 ```
 
 - Using the IQR method, we can see that many columns have outliers. I think this is expected for crime data, because it can vary widely across neighbourhoods. My current plan is to keep these outliers to aviod being baised in anaylsis. besides, these outliers do mean that the dataset is probabily skewed.
