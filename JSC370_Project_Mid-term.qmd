@@ -19,7 +19,7 @@ jupyter: python3
 
 - Link to the github repo: https://github.com/Jerry-Zeng-UofT/JSC370_Project
 
-## 2. Data Acquisition and library imports
+## 2. Data Acquisition and library imports (Methods)
 
 ```{python}
 import requests
@@ -65,7 +65,7 @@ print(df.columns.tolist())
 
 - The dataset doesnt contain a metadata file for detailed data description. However, the column names are mostly self-explanatory. 
 
-## 3. EDA
+## 3. EDA (Methods)
 
 ```{python}
 # Basic inspection
@@ -210,7 +210,7 @@ for col in numeric_cols:
 
 - Using the IQR method, we can see that many columns have outliers. I think this is expected for crime data, because it can vary widely across neighbourhoods. My current plan is to keep these outliers to aviod being baised in anaylsis. besides, these outliers do mean that the dataset is probabily skewed.
 
-## 4. Tables of summary statistics
+## 4. Tables of summary statistics (Preliminary Results)
 
 ```{python}
 # Set up for the graphs and tables
@@ -312,7 +312,7 @@ table3
 
 ```
 
-## 5. Visualizations 
+## 5. Visualizations (Preliminary Results)
 
 ```{python}
 # ranked dot plot of one important rate
@@ -450,7 +450,7 @@ plt.show()
 
 - The two bar plots shows a comparsion between crime counts rank and crime rates rank, for a specific categroy, assault. From this we can see that not all of them matches! Moss park has the 2nd highest assault count but 4th highest in assault rate. This suggests that Crime counts and crime rates may not always align, and the population may have a high effect. However, this is only a specific crime in a specific year, and most of them, although dont match in rank, appear on both plots. More statistical evidence is required to answer question 4: 'Do crime counts and crime rates tell the same story across neighbourhoods?'
  
-## 6. Hypothesis testing
+## 6. Hypothesis testing (Preliminary Results & Methods)
 
 - Since for question 3 and 4, I cannot draw clear conclusions from the visualizations and the tables, Hypothesis test may help.
 
@@ -481,13 +481,13 @@ q3_results
 
 - As shown in the result table, which is sorted by p_values, Most of the offences do have a linear relationship with other offences, except the assault-autotheft pair, autotheft-breakenter pair and the biketheft-theftfrommv pair when using the critical value of alpha-0.05 and the rejection rule of p_value >= alpha. 
 
-## Summary of current findings
+## Summary of current findings (Summary)
 
 - After the above process, some of the questions can be answered with the facts found from the dataset (with tables, visualizations or hypothesis test): the recorded crime rate is very different across different neighborhoods. Moreover, assault shows the greatest neighbourhood-to-neighbourhood variation (Some place has alot, some place has very few). Crimes are somewhat linear related, meaning that having alot of crime in one type often means other kinds are also common. High counts in crime often means high rate, but not guaranteed. Population may make the storytelling of crime count and crime rate different. 
 
 - There are also some interesting fact about the dataset per se: quite a lot of missing values (may lead to misleading conclusions), long time coverage (2014-2025), etc.
 
-## Plan for the final project 
+## Plan for the final project (Summary)
 
 - I believe with ML and interactive visualization, I should come up with more interesting questions that can be answered with this dataset. Or, I should use more statistical way to prove and support my current conclusions of existing questions. 
 
