@@ -1,0 +1,35 @@
+---
+title: "Toronto Neighbourhood Crime Analysis"
+format:
+  html:
+    toc: true
+    code-fold: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## Toronto Neighbourhood Crime Analysis
+
+- Our living social enviroment is changing overtime. By analyzing the Neighbourhood Crime Rates dataset of Toronto city, we gain insights into how crime rates vary across different neighbourhoods and offence categories, and how they have changed over time. We also explore the relationships between different crime types and evaluate the predictive power of past crime patterns for future crime rates. All of this tells us us how the overall social enviroment in Toronto changes, and potentially provide some information for policy making and crime prevention.
+
+- This dataset, the Neighbourhood Crime Rates dataset, is from the City of Toronto Open Data Portal. The portal is the City’s official open data source (https://www.toronto.ca/city-government/data-research-maps/open-data/), and this dataset contains crime data by neighbourhood. In the data table, each row represents one Toronto neighbourhood, and the columns describe different neighbourhood-level crime measures.
+
+ 'This dataset includes the Crime Data by Neighbourhood. Counts are available for Assault, Auto Theft, Break and Enter, Robbery, Theft Over, Homicide and Shooting & Firearm Discharges. Data also includes the crime rate per 100,000 population calculated using the population estimates provided by Environics Analytics.' quoted from https://open.toronto.ca/dataset/neighbourhood-crime-rates/, the dataset description page. 
+
+- Notice: the analysis is intended for descriptive and predictive understanding, not for labeling neighbourhoods or residents
+
+- The Main project question:
+    How have Toronto neighbourhood crime patterns changed from 2014 to 2025, and how well can past crime patterns predict future neighbourhood crime rates?
+
+- Supporting subquestions answered during the process:
+    1. How much do recorded crime rates vary across Toronto neighbourhoods?
+    2. Can neighbourhoods be grouped into meaningful crime-profile clusters?
+    3. How well do linear models, random forests, and boosting predict next-year crime rates?
+
+- Link to the github repo: https://github.com/Jerry-Zeng-UofT/JSC370_Project
+
+- Link to the pdf reports: XXX
+
+- Link to the presentation: XXX

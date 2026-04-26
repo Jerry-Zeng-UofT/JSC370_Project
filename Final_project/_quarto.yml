@@ -1,0 +1,38 @@
+project:
+  type: website
+  output-dir: docs
+  render:
+    - index.qmd
+    - cluster-map.qmd
+    - slope-map.qmd
+    - model-comparison.qmd
+    - feature-importance.qmd
+    - "!EDA_Analysis_notebook.qmd"
+
+website:
+  title: "Toronto Neighbourhood Crime Analysis"
+  navbar:
+    left:
+      - text: "Home"
+        href: index.qmd
+      - text: "Cluster Map"
+        href: cluster-map.qmd
+      - text: "Slope Map"
+        href: slope-map.qmd
+      - text: "Model Comparison"
+        href: model-comparison.qmd
+      - text: "Feature Importance"
+        href: feature-importance.qmd
+  page-footer:
+    center: "Toronto Neighbourhood Crime Analysis"
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    code-fold: false
+
+execute:
+  echo: false
+  warning: false
+  message: false

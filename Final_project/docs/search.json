@@ -1,0 +1,44 @@
+[
+  {
+    "objectID": "feature-importance.html",
+    "href": "feature-importance.html",
+    "title": "Predictor Importance by Offence",
+    "section": "",
+    "text": "This chart compares variable importance from the tuned Random Forest and XGBoost models. Use the dropdown to switch across offence types."
+  },
+  {
+    "objectID": "slope-map.html",
+    "href": "slope-map.html",
+    "title": "Neighbourhood Crime Trend Map",
+    "section": "",
+    "text": "This interactive map summarizes how offence rates changed from 2014 to 2025. Use the layer control to switch between offence types. Blue indicates decreasing rates, red indicates increasing rates, and white indicates relatively stable rates."
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "Toronto Neighbourhood Crime Analysis",
+    "section": "",
+    "text": "Our living social enviroment is changing overtime. By analyzing the Neighbourhood Crime Rates dataset of Toronto city, we gain insights into how crime rates vary across different neighbourhoods and offence categories, and how they have changed over time. We also explore the relationships between different crime types and evaluate the predictive power of past crime patterns for future crime rates. All of this tells us us how the overall social enviroment in Toronto changes, and potentially provide some information for policy making and crime prevention.\nThis dataset, the Neighbourhood Crime Rates dataset, is from the City of Toronto Open Data Portal. The portal is the City’s official open data source (https://www.toronto.ca/city-government/data-research-maps/open-data/), and this dataset contains crime data by neighbourhood. In the data table, each row represents one Toronto neighbourhood, and the columns describe different neighbourhood-level crime measures.\n\n‘This dataset includes the Crime Data by Neighbourhood. Counts are available for Assault, Auto Theft, Break and Enter, Robbery, Theft Over, Homicide and Shooting & Firearm Discharges. Data also includes the crime rate per 100,000 population calculated using the population estimates provided by Environics Analytics.’ quoted from https://open.toronto.ca/dataset/neighbourhood-crime-rates/, the dataset description page.\n\nNotice: the analysis is intended for descriptive and predictive understanding, not for labeling neighbourhoods or residents\nThe Main project question: How have Toronto neighbourhood crime patterns changed from 2014 to 2025, and how well can past crime patterns predict future neighbourhood crime rates?\nSupporting subquestions answered during the process:\n\nHow much do recorded crime rates vary across Toronto neighbourhoods?\nCan neighbourhoods be grouped into meaningful crime-profile clusters?\nHow well do linear models, random forests, and boosting predict next-year crime rates?\n\nLink to the github repo: https://github.com/Jerry-Zeng-UofT/JSC370_Project\nLink to the pdf reports: XXX\nLink to the presentation: XXX"
+  },
+  {
+    "objectID": "index.html#toronto-neighbourhood-crime-analysis",
+    "href": "index.html#toronto-neighbourhood-crime-analysis",
+    "title": "Toronto Neighbourhood Crime Analysis",
+    "section": "",
+    "text": "Our living social enviroment is changing overtime. By analyzing the Neighbourhood Crime Rates dataset of Toronto city, we gain insights into how crime rates vary across different neighbourhoods and offence categories, and how they have changed over time. We also explore the relationships between different crime types and evaluate the predictive power of past crime patterns for future crime rates. All of this tells us us how the overall social enviroment in Toronto changes, and potentially provide some information for policy making and crime prevention.\nThis dataset, the Neighbourhood Crime Rates dataset, is from the City of Toronto Open Data Portal. The portal is the City’s official open data source (https://www.toronto.ca/city-government/data-research-maps/open-data/), and this dataset contains crime data by neighbourhood. In the data table, each row represents one Toronto neighbourhood, and the columns describe different neighbourhood-level crime measures.\n\n‘This dataset includes the Crime Data by Neighbourhood. Counts are available for Assault, Auto Theft, Break and Enter, Robbery, Theft Over, Homicide and Shooting & Firearm Discharges. Data also includes the crime rate per 100,000 population calculated using the population estimates provided by Environics Analytics.’ quoted from https://open.toronto.ca/dataset/neighbourhood-crime-rates/, the dataset description page.\n\nNotice: the analysis is intended for descriptive and predictive understanding, not for labeling neighbourhoods or residents\nThe Main project question: How have Toronto neighbourhood crime patterns changed from 2014 to 2025, and how well can past crime patterns predict future neighbourhood crime rates?\nSupporting subquestions answered during the process:\n\nHow much do recorded crime rates vary across Toronto neighbourhoods?\nCan neighbourhoods be grouped into meaningful crime-profile clusters?\nHow well do linear models, random forests, and boosting predict next-year crime rates?\n\nLink to the github repo: https://github.com/Jerry-Zeng-UofT/JSC370_Project\nLink to the pdf reports: XXX\nLink to the presentation: XXX"
+  },
+  {
+    "objectID": "cluster-map.html",
+    "href": "cluster-map.html",
+    "title": "Crime Profile Cluster Map",
+    "section": "",
+    "text": "This page shows the neighbourhood crime-profile clusters from the K-means analysis. Hover over a neighbourhood to see its name and cluster.\n\n\nMake this Notebook Trusted to load map: File -&gt; Trust Notebook"
+  },
+  {
+    "objectID": "model-comparison.html",
+    "href": "model-comparison.html",
+    "title": "Predictive Model Comparison",
+    "section": "",
+    "text": "This chart compares predictive performance across offences and models. Use the dropdown to switch between RMSE, MAE, and R²."
+  }
+]

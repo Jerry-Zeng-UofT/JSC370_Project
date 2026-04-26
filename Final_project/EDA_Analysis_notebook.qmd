@@ -1,0 +1,1217 @@
+---
+title: "EDA and Analysis Notebook"
+format:
+  html:
+    toc: true
+    code-fold: false
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## Toronto Neighbourhood Crime Analysis
+
+- Our living social enviroment is changing overtime. By analyzing the Neighbourhood Crime Rates dataset of Toronto city, we gain insights into how crime rates vary across different neighbourhoods and offence categories, and how they have changed over time. We also explore the relationships between different crime types and evaluate the predictive power of past crime patterns for future crime rates. All of this tells us us how the overall social enviroment in Toronto changes, and potentially provide some information for policy making and crime prevention.
+
+- This dataset, the Neighbourhood Crime Rates dataset, is from the City of Toronto Open Data Portal. The portal is the City’s official open data source (https://www.toronto.ca/city-government/data-research-maps/open-data/), and this dataset contains crime data by neighbourhood. In the data table, each row represents one Toronto neighbourhood, and the columns describe different neighbourhood-level crime measures.
+
+ 'This dataset includes the Crime Data by Neighbourhood. Counts are available for Assault, Auto Theft, Break and Enter, Robbery, Theft Over, Homicide and Shooting & Firearm Discharges. Data also includes the crime rate per 100,000 population calculated using the population estimates provided by Environics Analytics.' quoted from https://open.toronto.ca/dataset/neighbourhood-crime-rates/, the dataset description page. 
+
+- Notice: the analysis is intended for descriptive and predictive understanding, not for labeling neighbourhoods or residents
+
+- The Main project question:
+    How have Toronto neighbourhood crime patterns changed from 2014 to 2025, and how well can past crime patterns predict future neighbourhood crime rates?
+
+- Supporting subquestions answered during the process:
+    1. How much do recorded crime rates vary across Toronto neighbourhoods?
+    2. Can neighbourhoods be grouped into meaningful crime-profile clusters?
+    3. How well do linear models, random forests, and boosting predict next-year crime rates?
+
+- Link to the github repo: https://github.com/Jerry-Zeng-UofT/JSC370_Project
+
+<!-- 2. Data Acquisition and library imports -->
+
+```{python}
+import requests
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import re
+from itertools import combinations
+from scipy.stats import spearmanr
+from statsmodels.stats.multitest import multipletests
+from itertools import combinations
+from scipy.stats import pearsonr
+from pathlib import Path
+
+import pandas as pd
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+
+from sklearn.tree import DecisionTreeRegressor
+
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import ParameterGrid
+
+from xgboost import XGBRegressor
+```
+
+```{python}
+# helper function to save csv if not already exists
+DATA_DIR = Path("data")
+DATA_DIR.mkdir(exist_ok=True)
+
+def save_csv_if_missing(df_obj, filename):
+    out_path = DATA_DIR / filename
+    if not out_path.exists():
+        df_obj.to_csv(out_path, index=False)
+        print(f"Saved: {out_path}")
+    else:
+        print(f"Already exists, skipped: {out_path}")
+```
+
+```{python}
+base_url = "https://ckan0.cf.opendata.inter.prod-toronto.ca"
+
+# Developer code given by dataset website 
+package = requests.get(
+    base_url + "/api/3/action/package_show",
+    params={"id": "neighbourhood-crime-rates"}
+).json()
+
+resource_id = None
+for resource in package["result"]["resources"]:
+    if resource["datastore_active"]:
+        resource_id = resource["id"]
+        print("Using resource:", resource["name"])
+        print("Resource ID:", resource_id)
+        break
+
+if resource_id is None:
+    raise ValueError("No datastore_active resource found.")
+
+dump_url = f"{base_url}/datastore/dump/{resource_id}"
+df = pd.read_csv(dump_url)
+
+# print(df.head())
+# print(df.shape)
+print(df.columns.tolist())
+```
+
+- The dataset doesnt contain a metadata file for detailed data description. However, the column names are mostly self-explanatory. 
+
+<!-- 2. EDA -->
+
+```{python}
+# Basic inspection
+print("Shape:", df.shape)
+
+print("\nData types:")
+print(df.dtypes)
+```
+
+- The dataset has 158 rows and 221 columns. Each row represents a neighbourhood, and the columns include the neighbourhood name, population counts for different years, and crime counts and rates for different offence categories and years.
+
+```{python}
+print("\nMissing values in each column: (omitted for clean report)")
+missing = df.isna().sum()
+missing = missing[missing > 0]
+
+print(missing.to_string())
+```
+
+- There are alot of missing values in the dataset. There are only 158 neighbourhoods, but some crimes have more than 100 missing values, such as homicide in almost every year. This amount of missing values can lead to misleading conclusions, and potentially makes the further analysis biased, so I will exclude offence categories with too many missing values from the main analysis. 
+
+- That said, a single cut off might not be appropriate, because the dataset has another dimension -- time, and the number of missing values could be different across years. Hence, I will evaluate the missing values for each crime type based on average missingness across years and the worst year missingness. Then I will set a threshold based on the distribution of missing values across crime types. 
+
+```{python}
+
+pattern = re.compile(r"^(.*?)(_RATE)?_(\d{4})$")
+
+records = []
+
+for col in df.columns:
+
+    match = pattern.match(col)
+
+    if match:
+
+        offence = match.group(1)          # e.g. ASSAULT, HOMICIDE, BIKETHEFT
+
+        is_rate = match.group(2) is not None
+
+        year = int(match.group(3))
+
+        missing_count = df[col].isna().sum()
+
+        missing_rate = missing_count / len(df)
+
+        records.append({
+
+            "column": col,
+
+            "offence": offence,
+
+            "type": "rate" if is_rate else "count",
+
+            "year": year,
+
+            "missing_count": missing_count,
+
+            "missing_rate": missing_rate
+
+        })
+
+missing_by_col = pd.DataFrame(records)
+
+summary = (
+
+    missing_by_col
+
+    .groupby(["offence", "type"])
+
+    .agg(
+
+        n_years=("year", "count"),
+
+        avg_missing_count=("missing_count", "mean"),
+
+        worst_missing_count=("missing_count", "max"),
+
+        avg_missing_rate=("missing_rate", "mean"),
+
+        worst_missing_rate=("missing_rate", "max")
+
+    )
+
+    .reset_index()
+
+)
+
+# Find the year with the worst missingness for each offence + type
+
+worst_year_info = (
+
+    missing_by_col.loc[
+
+        missing_by_col.groupby(["offence", "type"])["missing_count"].idxmax(),
+
+        ["offence", "type", "year"]
+
+    ]
+
+    .rename(columns={"year": "worst_year"})
+
+)
+
+summary = summary.merge(worst_year_info, on=["offence", "type"], how="left")
+
+
+summary["avg_missing_pct"] = summary["avg_missing_rate"] * 100
+
+summary["worst_missing_pct"] = summary["worst_missing_rate"] * 100
+
+
+summary = summary.sort_values(
+
+    by=["worst_missing_rate", "avg_missing_rate"],
+
+    ascending=False
+
+)
+
+
+report_table = summary[[
+    "offence", "type", "n_years",
+    "avg_missing_count", "worst_missing_count", "worst_year",
+    "avg_missing_pct", "worst_missing_pct"
+]].copy()
+
+# Rename columns for presentation
+report_table = report_table.rename(columns={
+    "offence": "Offence",
+    "type": "Measure Type",
+    "n_years": "Years Available",
+    "avg_missing_count": "Average Missing Count",
+    "worst_missing_count": "Worst-Year Missing Count",
+    "worst_year": "Worst Year",
+    "avg_missing_pct": "Average Missing Rate (%)",
+    "worst_missing_pct": "Worst-Year Missing Rate (%)"
+})
+
+
+report_table["Offence"] = report_table["Offence"].str.title()
+report_table["Measure Type"] = report_table["Measure Type"].str.title()
+
+report_table["Average Missing Count"] = report_table["Average Missing Count"].round(2)
+report_table["Average Missing Rate (%)"] = report_table["Average Missing Rate (%)"].round(2)
+report_table["Worst-Year Missing Rate (%)"] = report_table["Worst-Year Missing Rate (%)"].round(2)
+
+report_table = report_table.sort_values(
+    by=["Worst-Year Missing Rate (%)", "Average Missing Rate (%)"],
+    ascending=False
+).reset_index(drop=True)
+
+# Show the table
+report_table
+```
+
+- Homicide has extremely high missing rate across all years, with an average missing rate of about 69% and a worst-year missing rate of about 77%. That is too incomplete, so it will be excluded from the main analysis.
+
+- Shooting also has high missing rate, with an average of about 30% and a worst-year missing rate of about 49%. Although not as bad as homicide, it is still quite high and may lead to biased conclusions, so it will not be included in the main analysis either.
+
+- For the remaining offences, missing rate is low. Biketheft has the highest missing rate among remaining offences, but its average missing rate is only about 4.3% and its worst-year missing rate is about 7.0%, which is still relatively small in this dataset. Hence, all of the remaining offences will be included in the main analysis.
+
+- That said, even with low missing rate, these offences with missing values may still have influence on the analysis. Since the dataset has only 158 rows, directly dropping rows with missing values may lead to significant loss of information. Hence, I will handle the missing values based on anaylsis type. For descriptive analysis, I will omit the missing neighbourhood so I do not 'make up' data. For predictive analysis, I will impute the missing values so the dataset can be used for model training.
+
+
+```{python}
+# Drop all HOMICIDE and SHOOTING columns
+# Identify columns to remove
+cols_to_drop = [col for col in df.columns if col.startswith(("HOMICIDE", "SHOOTING"))]
+
+# Drop them
+df = df.drop(columns=cols_to_drop).copy()
+```
+
+```{python}
+# Data wrangling - clean column names
+df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+
+print(df.columns.tolist())
+```
+
+```{python}
+# Data cleaning - check for negative values in numeric columns
+
+numeric_cols = df.select_dtypes(include="number").columns
+
+for col in numeric_cols:
+    if (df[col] < 0).any():
+        print(f"{col} has negative values")
+```
+
+- One of the impossible value is any negative value in the crime counts or crime rates. Nothing is printed, so there isnt any. 
+
+```{python}
+# Keep identifier columns and rate columns only
+id_cols = ["_id", "area_name", "hood_id", "population_2025", "geometry"]
+
+# Keep only the ID columns that actually exist in df
+id_cols = [col for col in id_cols if col in df.columns]
+
+rate_cols = [col for col in df.columns if "_rate_" in col]
+
+df_rate = df[id_cols + rate_cols].copy()
+
+print(df_rate.shape)
+print(df_rate.columns.tolist())
+```
+
+```{python}
+df_long = df_rate.melt(
+
+    id_vars=id_cols,
+
+    value_vars=rate_cols,
+
+    var_name="offence_year",
+
+    value_name="rate"
+
+)
+
+# Split offence_year into offence and year
+
+df_long[["offence", "year"]] = df_long["offence_year"].str.rsplit("_rate_", n=1, expand=True)
+
+# Clean up types
+
+df_long["year"] = df_long["year"].astype(int)
+
+df_long["offence"] = df_long["offence"].str.upper()
+
+base_cols = [col for col in ["_id", "area_name", "hood_id", "population_2025", "geometry"] if col in df_long.columns]
+
+df_long = df_long[base_cols + ["offence", "year", "rate"]]
+
+print(df_long.shape)
+
+df_long.head()
+```
+
+```{python}
+save_csv_if_missing(df, "cleaned_crime.csv")
+
+# df_long is too large for the repo, it will not be included in the data folder. When any visualization needs it, the code of generating it will be copied there. 
+
+# save_csv_if_missing(df_long, "df_long.csv")
+```
+
+- The dataset is now in a long format, which is more suitable for analysis and visualization. Each row represents the crime rate for a specific offence in a specific year for a specific neighbourhood.
+
+```{python}
+# Summary table: mean and median rate by offence and year
+summary_stats_table = (
+    df_long
+    .groupby(["offence", "year"], as_index=False)
+    .agg(
+        mean_rate=("rate", "mean"),
+        median_rate=("rate", "median")
+    )
+)
+
+summary_stats_table["mean_rate"] = summary_stats_table["mean_rate"].round(2)
+summary_stats_table["median_rate"] = summary_stats_table["median_rate"].round(2)
+summary_stats_table = summary_stats_table.sort_values(["offence", "year"]).reset_index(drop=True)
+
+summary_stats_wide = (
+    summary_stats_table
+    .pivot(index="year", columns="offence", values=["mean_rate", "median_rate"])
+)
+
+summary_stats_wide = summary_stats_wide.round(2)
+
+summary_stats_wide
+```
+
+```{python}
+plt.figure(figsize=(10, 6))
+
+for offence in summary_stats_table["offence"].unique():
+
+    subset = summary_stats_table[summary_stats_table["offence"] == offence]
+
+    plt.plot(subset["year"], subset["mean_rate"], marker="o", label=offence.title())
+
+plt.xlabel("Year")
+
+plt.ylabel("Mean neighbourhood crime rate")
+
+plt.title("Mean crime rate by offence over time")
+
+plt.legend(title="Offence", bbox_to_anchor=(1.02, 1), loc="upper left")
+
+plt.tight_layout()
+
+plt.show()
+```
+
+```{python}
+# Choose one recent year for distribution comparison
+
+plot_year = 2025
+
+df_dist = df_long[df_long["year"] == plot_year].copy()
+
+plt.figure(figsize=(10, 6))
+
+df_dist.boxplot(column="rate", by="offence", grid=False)
+
+plt.xlabel("Offence")
+
+plt.ylabel("Crime rate")
+
+plt.title(f"Distribution of neighbourhood crime rates by offence ({plot_year})")
+
+plt.suptitle("") 
+
+plt.xticks(rotation=45)
+
+plt.tight_layout()
+
+plt.show()
+```
+
+<!-- 3. Descriptive Analysis -->
+
+```{python}
+#  Build neighbourhood-level features for clustering
+#  Use mean crime rate across 2014–2025 for each offence
+
+cluster_features = (
+    df_long
+    .groupby(["hood_id", "area_name", "offence"], as_index=False)["rate"]
+    .mean()
+    .pivot(index=["hood_id", "area_name"], columns="offence", values="rate")
+    .reset_index()
+)
+
+feature_cols = [col for col in cluster_features.columns if col not in ["hood_id", "area_name"]]
+
+X = cluster_features[feature_cols].copy()
+
+# Impute small remaining missing values with median
+imputer = SimpleImputer(strategy="median")
+X_imputed = imputer.fit_transform(X)
+
+# Standardize so one offence does not dominate by scale
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X_imputed)
+
+
+# Fit K-means
+
+k = 4
+kmeans = KMeans(n_clusters=k, random_state=42, n_init=50)
+cluster_features["cluster"] = kmeans.fit_predict(X_scaled)
+
+# Count neighbourhoods in each cluster
+cluster_counts = (
+    cluster_features["cluster"]
+    .value_counts()
+    .sort_index()
+    .rename_axis("cluster")
+    .reset_index(name="n_neighbourhoods")
+)
+
+print("Cluster counts:")
+print(cluster_counts)
+```
+
+```{python}
+cluster_assignments = cluster_features[["hood_id", "area_name", "cluster"]].copy()
+save_csv_if_missing(cluster_assignments, "cluster_assignments.csv")
+
+
+# Profile each cluster using ORIGINAL SCALE means
+
+cluster_profiles = (
+    cluster_features
+    .groupby("cluster")[feature_cols]
+    .mean()
+    .round(1)
+)
+
+print("\nCluster profiles (mean crime rates on original scale):")
+print(cluster_profiles)
+
+for c in sorted(cluster_features["cluster"].unique()):
+    print(f"\nCluster {c} neighbourhoods:")
+    print(cluster_features.loc[cluster_features["cluster"] == c, "area_name"].tolist())
+```
+
+```{python}
+# Elbow method: fit KMeans for a range of k values
+
+k_values = list(range(2, 9))
+inertias = []
+
+for k in k_values:
+    km = KMeans(n_clusters=k, random_state=42, n_init=50)
+    km.fit(X_scaled)
+    inertias.append(km.inertia_)
+
+elbow_table = pd.DataFrame({
+    "k": k_values,
+    "inertia": inertias
+})
+
+# Percent decrease in inertia from previous k
+elbow_table["pct_drop_from_previous"] = elbow_table["inertia"].pct_change() * -100
+
+# First difference and second difference
+elbow_table["inertia_drop"] = elbow_table["inertia"].shift(1) - elbow_table["inertia"]
+elbow_table["second_difference"] = elbow_table["inertia_drop"].shift(1) - elbow_table["inertia_drop"]
+
+print(elbow_table.round(3))
+
+plt.figure(figsize=(8, 5))
+plt.plot(elbow_table["k"], elbow_table["inertia"], marker="o")
+plt.xlabel("Number of clusters (k)")
+plt.ylabel("Within-cluster sum of squares (Inertia)")
+plt.title("Elbow Method for Choosing k in K-means")
+plt.xticks(k_values)
+plt.tight_layout()
+plt.show()
+```
+
+
+
+```{python}
+# Compute linear slope of rate ~ year for each neighbourhood and offence
+def compute_slope(group):
+    g = group.dropna(subset=["year", "rate"]).sort_values("year")
+    
+    # Need at least 2 points to fit a slope
+    if len(g) < 2:
+        return np.nan
+    
+    slope = np.polyfit(g["year"], g["rate"], 1)[0]
+    return slope
+
+slope_df = (
+    df_long
+    .groupby(["hood_id", "area_name", "offence"], as_index=False)
+    .apply(lambda g: pd.Series({
+        "slope": compute_slope(g),
+        "mean_rate": g["rate"].mean(),
+        "rate_2014": g.loc[g["year"] == 2014, "rate"].mean(),
+        "rate_2025": g.loc[g["year"] == 2025, "rate"].mean()
+    }))
+    .reset_index(drop=True)
+)
+
+slope_df.head()
+```
+
+<!-- 4. Predictive Analysis -->
+
+```{python}
+
+retained_offences = [
+    "ASSAULT",
+    "AUTOTHEFT",
+    "BREAKENTER",
+    "ROBBERY",
+    "THEFTOVER",
+    "THEFTFROMMV",
+    "BIKETHEFT"
+]
+
+model_long = df_long[df_long["offence"].isin(retained_offences)].copy()
+
+# 2. Pivot to one row per neighbourhood-year
+#    Columns = offence rates in that year
+
+wide_rates = (
+    model_long
+    .pivot_table(
+        index=["hood_id", "area_name", "year"],
+        columns="offence",
+        values="rate"
+    )
+    .reset_index()
+)
+
+# make column names lower case for modeling, and sort by hood_id and year
+wide_rates.columns.name = None
+wide_rates.columns = [str(col).lower() for col in wide_rates.columns]
+wide_rates = wide_rates.sort_values(["hood_id", "year"]).reset_index(drop=True)
+
+# lag-1 predictors within each neighbourhood
+offence_cols = [
+    "assault",
+    "autotheft",
+    "breakenter",
+    "robbery",
+    "theftover",
+    "theftfrommv",
+    "biketheft"
+]
+
+for col in offence_cols:
+    wide_rates[f"{col}_lag1"] = wide_rates.groupby("hood_id")[col].shift(1)
+
+# Create year index
+wide_rates["year_index"] = wide_rates["year"] - 2014
+
+
+# Restrict to years 2015–2025 (2014 has no lag-1 predictor)
+model_df = wide_rates[(wide_rates["year"] >= 2015) & (wide_rates["year"] <= 2025)].copy()
+
+
+# Keep only the columns needed for modeling
+# Response columns = current-year offence rates
+# Predictor columns = lag-1 offence rates + year_index
+
+predictor_cols = [f"{col}_lag1" for col in offence_cols] + ["year_index"]
+
+response_cols = offence_cols
+
+model_df = model_df[
+    ["hood_id", "area_name", "year"] + predictor_cols + response_cols
+].copy()
+
+print("Modeling dataset shape:", model_df.shape)
+print("\nColumns:")
+print(model_df.columns.tolist())
+
+print("\nFirst few rows:")
+print(model_df.head())
+```
+
+```{python}
+# Training: 2015-2023
+
+train_df = model_df[model_df["year"] <= 2023].copy()
+
+# Validation: 2024
+
+val_df = model_df[model_df["year"] == 2024].copy()
+
+# Test: 2025
+
+test_df = model_df[model_df["year"] == 2025].copy()
+
+```
+
+```{python}
+results = []
+
+for target in offence_cols:
+    target_lag = f"{target}_lag1"
+    
+    # Keep rows with non-missing response and predictors needed for this model
+    train_sub = train_df[predictor_cols + [target]].dropna().copy()
+    test_sub  = test_df[predictor_cols + [target]].dropna().copy()
+    
+    # Skip if test or train is empty
+    if len(train_sub) == 0 or len(test_sub) == 0:
+        continue
+    
+    # Naive baseline
+    y_train = train_sub[target]
+    y_test = test_sub[target]
+    
+    y_pred_naive = test_sub[target_lag]
+    
+    rmse_naive = mean_squared_error(y_test, y_pred_naive) ** 0.5
+    mae_naive = mean_absolute_error(y_test, y_pred_naive)
+    r2_naive = r2_score(y_test, y_pred_naive)
+    
+    results.append({
+        "offence": target,
+        "model": "Naive baseline",
+        "n_train": len(train_sub),
+        "n_test": len(test_sub),
+        "rmse": rmse_naive,
+        "mae": mae_naive,
+        "r2": r2_naive
+    })
+    
+    # Linear regression
+    X_train = train_sub[predictor_cols]
+    X_test = test_sub[predictor_cols]
+    
+    lr = LinearRegression()
+    lr.fit(X_train, y_train)
+    y_pred_lr = lr.predict(X_test)
+    
+    rmse_lr = mean_squared_error(y_test, y_pred_lr) ** 0.5
+    mae_lr = mean_absolute_error(y_test, y_pred_lr)
+    r2_lr = r2_score(y_test, y_pred_lr)
+    
+    results.append({
+        "offence": target,
+        "model": "Linear regression",
+        "n_train": len(train_sub),
+        "n_test": len(test_sub),
+        "rmse": rmse_lr,
+        "mae": mae_lr,
+        "r2": r2_lr
+    })
+
+results_df = pd.DataFrame(results)
+results_df = results_df.sort_values(["offence", "model"]).reset_index(drop=True)
+
+results_df.round(3)
+```
+
+```{python}
+save_csv_if_missing(results_df, "basic_model_results.csv")
+```
+
+```{python}
+results_wide = results_df.pivot(
+    index="offence",
+    columns="model",
+    values=["rmse", "mae", "r2"]
+)
+
+results_wide = results_wide.round(2)
+results_wide
+```
+
+```{python}
+tree_results = []
+tree_importance_rows = []
+
+for target in offence_cols:
+    train_sub = train_df[predictor_cols + [target]].dropna().copy()
+    test_sub  = test_df[predictor_cols + [target]].dropna().copy()
+    
+    if len(train_sub) == 0 or len(test_sub) == 0:
+        continue
+    
+    X_train = train_sub[predictor_cols]
+    y_train = train_sub[target]
+    X_test = test_sub[predictor_cols]
+    y_test = test_sub[target]
+    
+    # Simple regression tree
+    tree = DecisionTreeRegressor(
+        random_state=42,
+        max_depth=4,
+        min_samples_leaf=5
+    )
+    tree.fit(X_train, y_train)
+    y_pred_tree = tree.predict(X_test)
+    
+    rmse_tree = mean_squared_error(y_test, y_pred_tree) ** 0.5
+    mae_tree = mean_absolute_error(y_test, y_pred_tree)
+    r2_tree = r2_score(y_test, y_pred_tree)
+    
+    tree_results.append({
+        "offence": target,
+        "model": "Regression tree",
+        "n_train": len(train_sub),
+        "n_test": len(test_sub),
+        "rmse": rmse_tree,
+        "mae": mae_tree,
+        "r2": r2_tree
+    })
+    
+    imp_df = pd.DataFrame({
+        "target_offence": target,
+        "predictor": predictor_cols,
+        "importance": tree.feature_importances_
+    })
+    tree_importance_rows.append(imp_df)
+
+tree_results_df = pd.DataFrame(tree_results)
+tree_results_df = tree_results_df.sort_values("offence").reset_index(drop=True)
+
+tree_importance_df = pd.concat(tree_importance_rows, ignore_index=True)
+tree_importance_df["importance"] = tree_importance_df["importance"].round(4)
+
+tree_results_df.round(3)
+```
+
+```{python}
+save_csv_if_missing(tree_results_df, "tree_results.csv")
+```
+
+```{python}
+save_csv_if_missing(results_df, "basic_model_results.csv")
+```
+
+```{python}
+rf_param_grid = {
+    "n_estimators": [200, 500],
+    "max_depth": [4, 8, None],
+    "min_samples_leaf": [1, 3, 5],
+    "max_features": ["sqrt", 0.5]
+}
+
+rf_tuning_rows = []
+
+for target in offence_cols:
+    train_sub = train_df[predictor_cols + [target]].dropna().copy()
+    val_sub   = val_df[predictor_cols + [target]].dropna().copy()
+    
+    if len(train_sub) == 0 or len(val_sub) == 0:
+        continue
+    
+    X_train = train_sub[predictor_cols]
+    y_train = train_sub[target]
+    X_val = val_sub[predictor_cols]
+    y_val = val_sub[target]
+    
+    for params in ParameterGrid(rf_param_grid):
+        rf = RandomForestRegressor(
+            random_state=42,
+            n_jobs=-1,
+            **params
+        )
+        rf.fit(X_train, y_train)
+        y_val_pred = rf.predict(X_val)
+        
+        rmse = mean_squared_error(y_val, y_val_pred) ** 0.5
+        mae = mean_absolute_error(y_val, y_val_pred)
+        r2 = r2_score(y_val, y_val_pred)
+        
+        rf_tuning_rows.append({
+            "offence": target,
+            **params,
+            "val_rmse": rmse,
+            "val_mae": mae,
+            "val_r2": r2
+        })
+
+rf_tuning_df = pd.DataFrame(rf_tuning_rows)
+rf_tuning_df = rf_tuning_df.sort_values(["offence", "val_rmse"]).reset_index(drop=True)
+
+rf_tuning_df.head(20)
+```
+
+```{python}
+rf_best_params_df = (
+    rf_tuning_df
+    .groupby("offence", as_index=False)
+    .first()
+    .copy()
+)
+
+print(rf_best_params_df)
+
+rf_test_rows = []
+rf_importance_rows = []
+
+train_val_df = model_df[model_df["year"] <= 2024].copy()
+
+for target in offence_cols:
+    best_row = rf_best_params_df[rf_best_params_df["offence"] == target]
+    if best_row.empty:
+        continue
+    
+    best_params = {
+        "n_estimators": int(best_row["n_estimators"].iloc[0]),
+        "max_depth": None if pd.isna(best_row["max_depth"].iloc[0]) else (
+            None if str(best_row["max_depth"].iloc[0]) == "None" else int(best_row["max_depth"].iloc[0])
+        ),
+        "min_samples_leaf": int(best_row["min_samples_leaf"].iloc[0]),
+        "max_features": best_row["max_features"].iloc[0]
+    }
+    
+    train_val_sub = train_val_df[predictor_cols + [target]].dropna().copy()
+    test_sub      = test_df[predictor_cols + [target]].dropna().copy()
+    
+    if len(train_val_sub) == 0 or len(test_sub) == 0:
+        continue
+    
+    X_train_val = train_val_sub[predictor_cols]
+    y_train_val = train_val_sub[target]
+    X_test = test_sub[predictor_cols]
+    y_test = test_sub[target]
+    
+    rf_best = RandomForestRegressor(
+        random_state=42,
+        n_jobs=-1,
+        **best_params
+    )
+    rf_best.fit(X_train_val, y_train_val)
+    y_test_pred = rf_best.predict(X_test)
+    
+    rmse = mean_squared_error(y_test, y_test_pred) ** 0.5
+    mae = mean_absolute_error(y_test, y_test_pred)
+    r2 = r2_score(y_test, y_test_pred)
+    
+    rf_test_rows.append({
+        "offence": target,
+        "model": "Random forest (tuned)",
+        "n_train_val": len(train_val_sub),
+        "n_test": len(test_sub),
+        **best_params,
+        "test_rmse": rmse,
+        "test_mae": mae,
+        "test_r2": r2
+    })
+    
+    imp_df = pd.DataFrame({
+        "offence": target,
+        "predictor": predictor_cols,
+        "importance": rf_best.feature_importances_
+    })
+    rf_importance_rows.append(imp_df)
+
+rf_test_results_df = pd.DataFrame(rf_test_rows)
+rf_test_results_df = rf_test_results_df.sort_values("offence").reset_index(drop=True)
+
+rf_importance_df = pd.concat(rf_importance_rows, ignore_index=True)
+rf_importance_df["importance"] = rf_importance_df["importance"].round(4)
+
+rf_test_results_df.round(3)
+```
+
+```{python}
+save_csv_if_missing(rf_test_results_df, "rf_test_results.csv")
+save_csv_if_missing(rf_importance_df, "rf_importance.csv")
+```
+
+```{python}
+save_csv_if_missing(results_df, "basic_model_results.csv")
+```
+
+```{python}
+all_results_df = pd.concat(
+    [results_df, tree_results_df, rf_test_results_df],
+    ignore_index=True
+)
+
+all_results_df["rmse"] = all_results_df["rmse"].round(2)
+all_results_df["mae"] = all_results_df["mae"].round(2)
+all_results_df["r2"] = all_results_df["r2"].round(3)
+
+all_results_df = all_results_df.sort_values(["offence", "model"]).reset_index(drop=True)
+all_results_df
+```
+
+```{python}
+all_results_wide = all_results_df.pivot(
+    index="offence",
+    columns="model",
+    values=["rmse", "mae", "r2"]
+)
+
+all_results_wide = all_results_wide.round(2)
+all_results_wide
+```
+
+```{python}
+rf_importance_table = (
+    rf_importance_df
+    .sort_values(["offence", "importance"], ascending=[True, False])
+    .reset_index(drop=True)
+)
+
+rf_importance_table
+```
+
+```{python}
+xgb_param_grid = {
+    "n_estimators": [100, 300],
+    "max_depth": [2, 4, 6],
+    "learning_rate": [0.03, 0.1],
+    "subsample": [0.8, 1.0],
+    "colsample_bytree": [0.8, 1.0]
+}
+
+xgb_tuning_rows = []
+
+for target in offence_cols:
+    train_sub = train_df[predictor_cols + [target]].dropna().copy()
+    val_sub   = val_df[predictor_cols + [target]].dropna().copy()
+    
+    if len(train_sub) == 0 or len(val_sub) == 0:
+        continue
+    
+    X_train = train_sub[predictor_cols]
+    y_train = train_sub[target]
+    X_val = val_sub[predictor_cols]
+    y_val = val_sub[target]
+    
+    for params in ParameterGrid(xgb_param_grid):
+        xgb = XGBRegressor(
+            objective="reg:squarederror",
+            random_state=42,
+            n_jobs=-1,
+            **params
+        )
+        
+        xgb.fit(X_train, y_train)
+        y_val_pred = xgb.predict(X_val)
+        
+        rmse = mean_squared_error(y_val, y_val_pred) ** 0.5
+        mae = mean_absolute_error(y_val, y_val_pred)
+        r2 = r2_score(y_val, y_val_pred)
+        
+        xgb_tuning_rows.append({
+            "offence": target,
+            **params,
+            "val_rmse": rmse,
+            "val_mae": mae,
+            "val_r2": r2
+        })
+
+xgb_tuning_df = pd.DataFrame(xgb_tuning_rows)
+xgb_tuning_df = xgb_tuning_df.sort_values(["offence", "val_rmse"]).reset_index(drop=True)
+
+xgb_tuning_df.head(20)
+```
+
+```{python}
+xgb_best_params_df = (
+    xgb_tuning_df
+    .groupby("offence", as_index=False)
+    .first()
+    .copy()
+)
+
+xgb_best_params_df
+```
+
+```{python}
+xgb_test_rows = []
+xgb_importance_rows = []
+
+train_val_df = model_df[model_df["year"] <= 2024].copy()
+
+for target in offence_cols:
+    best_row = xgb_best_params_df[xgb_best_params_df["offence"] == target]
+    if best_row.empty:
+        continue
+    
+    best_params = {
+        "n_estimators": int(best_row["n_estimators"].iloc[0]),
+        "max_depth": int(best_row["max_depth"].iloc[0]),
+        "learning_rate": float(best_row["learning_rate"].iloc[0]),
+        "subsample": float(best_row["subsample"].iloc[0]),
+        "colsample_bytree": float(best_row["colsample_bytree"].iloc[0])
+    }
+    
+    train_val_sub = train_val_df[predictor_cols + [target]].dropna().copy()
+    test_sub      = test_df[predictor_cols + [target]].dropna().copy()
+    
+    if len(train_val_sub) == 0 or len(test_sub) == 0:
+        continue
+    
+    X_train_val = train_val_sub[predictor_cols]
+    y_train_val = train_val_sub[target]
+    X_test = test_sub[predictor_cols]
+    y_test = test_sub[target]
+    
+    xgb_best = XGBRegressor(
+        objective="reg:squarederror",
+        random_state=42,
+        n_jobs=-1,
+        **best_params
+    )
+    
+    xgb_best.fit(X_train_val, y_train_val)
+    y_test_pred = xgb_best.predict(X_test)
+    
+    rmse = mean_squared_error(y_test, y_test_pred) ** 0.5
+    mae = mean_absolute_error(y_test, y_test_pred)
+    r2 = r2_score(y_test, y_test_pred)
+    
+    xgb_test_rows.append({
+        "offence": target,
+        "model": "XGBoost (tuned)",
+        "n_train_val": len(train_val_sub),
+        "n_test": len(test_sub),
+        **best_params,
+        "test_rmse": rmse,
+        "test_mae": mae,
+        "test_r2": r2
+    })
+    
+    imp_df = pd.DataFrame({
+        "offence": target,
+        "predictor": predictor_cols,
+        "importance": xgb_best.feature_importances_
+    })
+    xgb_importance_rows.append(imp_df)
+
+xgb_test_results_df = pd.DataFrame(xgb_test_rows)
+xgb_test_results_df = xgb_test_results_df.sort_values("offence").reset_index(drop=True)
+
+xgb_importance_df = pd.concat(xgb_importance_rows, ignore_index=True)
+xgb_importance_df["importance"] = xgb_importance_df["importance"].round(4)
+
+xgb_test_results_df.round(3)
+```
+
+```{python}
+save_csv_if_missing(xgb_test_results_df, "xgb_test_results.csv")
+save_csv_if_missing(xgb_importance_df, "xgb_importance.csv")
+```
+
+```{python}
+save_csv_if_missing(results_df, "basic_model_results.csv")
+```
+
+```{python}
+xgb_importance_table = (
+    xgb_importance_df
+    .sort_values(["offence", "importance"], ascending=[True, False])
+    .reset_index(drop=True)
+)
+
+xgb_importance_table
+```
+
+```{python}
+# Standardize column names
+basic_results = results_df.copy()
+basic_results = basic_results.rename(columns={
+    "rmse": "RMSE",
+    "mae": "MAE",
+    "r2": "R2",
+    "offence": "Offence",
+    "model": "Model"
+})
+
+tree_results = tree_results_df.copy()
+tree_results = tree_results.rename(columns={
+    "rmse": "RMSE",
+    "mae": "MAE",
+    "r2": "R2",
+    "offence": "Offence",
+    "model": "Model"
+})
+
+rf_results = rf_test_results_df.copy()
+rf_results = rf_results.rename(columns={
+    "test_rmse": "RMSE",
+    "test_mae": "MAE",
+    "test_r2": "R2",
+    "offence": "Offence",
+    "model": "Model"
+})
+
+xgb_results = xgb_test_results_df.copy()
+xgb_results = xgb_results.rename(columns={
+    "test_rmse": "RMSE",
+    "test_mae": "MAE",
+    "test_r2": "R2",
+    "offence": "Offence",
+    "model": "Model"
+})
+
+basic_results = basic_results[["Offence", "Model", "RMSE", "MAE", "R2"]]
+tree_results = tree_results[["Offence", "Model", "RMSE", "MAE", "R2"]]
+rf_results = rf_results[["Offence", "Model", "RMSE", "MAE", "R2"]]
+xgb_results = xgb_results[["Offence", "Model", "RMSE", "MAE", "R2"]]
+
+# Combine all models
+model_compare_df = pd.concat(
+    [basic_results, tree_results, rf_results, xgb_results],
+    ignore_index=True
+)
+
+# Clean labels a bit
+model_compare_df["Offence"] = model_compare_df["Offence"].str.title()
+model_compare_df["Model"] = model_compare_df["Model"].replace({
+    "Naive baseline": "Naive Baseline",
+    "Linear regression": "Linear Regression",
+    "Regression tree": "Regression Tree",
+    "Random forest (tuned)": "Random Forest",
+    "XGBoost (tuned)": "XGBoost"
+})
+
+model_order = [
+    "Naive Baseline",
+    "Linear Regression",
+    "Regression Tree",
+    "Random Forest",
+    "XGBoost"
+]
+
+model_compare_df["Model"] = pd.Categorical(
+    model_compare_df["Model"],
+    categories=model_order,
+    ordered=True
+)
+
+model_compare_df = model_compare_df.sort_values(["Offence", "Model"]).reset_index(drop=True)
+
+model_compare_df.head()
+```
+
+
+
+```{python}
+rf_imp = rf_importance_df.copy()
+rf_imp["model"] = "Random Forest"
+rf_imp = rf_imp.rename(columns={"offence": "Offence", "predictor": "Predictor", "importance": "Importance"})
+
+xgb_imp = xgb_importance_df.copy()
+xgb_imp["model"] = "XGBoost"
+xgb_imp = xgb_imp.rename(columns={"offence": "Offence", "predictor": "Predictor", "importance": "Importance"})
+
+importance_df = pd.concat([rf_imp, xgb_imp], ignore_index=True)
+
+importance_df["Offence"] = importance_df["Offence"].str.title()
+importance_df["Predictor"] = importance_df["Predictor"].str.replace("_lag1", " (t-1)", regex=False)
+importance_df["Importance"] = importance_df["Importance"].round(4)
+
+importance_df.head()
+```
+
