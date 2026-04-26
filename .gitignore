@@ -1,0 +1,9 @@
+__pycache__/
+
+*.pyc
+
+.DS_Store
+
+Final_project/EDA_Analysis_notebook_files/
+
+Final_project/slope-map_files/
