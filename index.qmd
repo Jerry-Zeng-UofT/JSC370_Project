@@ -41,6 +41,6 @@ execute:
 
 [Download the PDF report](report.pdf)
 
-- Link to the presentation: XXX
+- Link to the presentation: https://drive.google.com/file/d/1z5eaNOtlgiNmPjXubSUdmxU0MztLiquW/view?usp=sharing
 
 - The report shows the detailed analysis process, including data cleaning, exploratory data analysis, clustering, and predictive modeling. Interactive visualizations are in different pages. 
