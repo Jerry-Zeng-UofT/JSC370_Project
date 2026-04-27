@@ -1,0 +1,105 @@
+---
+title: "Boxplot of Neighbourhood Crime Rates by Offence and Year"
+format:
+  html:
+    toc: false
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+This figure shows the distribution of neighbourhood crime rates for each offence category.  
+Use the dropdown menu to compare how the spread, median, and outliers change across years.
+
+```{python}
+import pandas as pd
+import plotly.graph_objects as go
+
+df = pd.read_csv("data/cleaned_crime.csv")
+
+rate_cols = [col for col in df.columns if "_rate_" in col.lower()]
+id_cols = [col for col in ["hood_id", "area_name"] if col in df.columns]
+
+df_long = df.melt(
+    id_vars=id_cols,
+    value_vars=rate_cols,
+    var_name="offence_year",
+    value_name="rate"
+)
+
+split_df = df_long["offence_year"].str.rsplit("_rate_", n=1, expand=True)
+df_long["offence"] = split_df[0].str.upper()
+df_long["year"] = split_df[1].astype(int)
+
+label_map = {
+    "ASSAULT": "Assault",
+    "AUTOTHEFT": "Autotheft",
+    "BIKETHEFT": "Biketheft",
+    "BREAKENTER": "Breakenter",
+    "ROBBERY": "Robbery",
+    "THEFTFROMMV": "Theftfrommv",
+    "THEFTOVER": "Theftover"
+}
+df_long["offence_label"] = df_long["offence"].map(label_map).fillna(df_long["offence"].str.title())
+df_long = df_long.dropna(subset=["rate"]).copy()
+
+offence_order = [x for x in ["Assault", "Autotheft", "Biketheft", "Breakenter", "Robbery", "Theftfrommv", "Theftover"]
+                 if x in df_long["offence_label"].unique()]
+years = sorted(df_long["year"].unique())
+
+# 3. Build interactive boxplot
+default_year = years[-1]
+fig = go.Figure()
+
+for offence in offence_order:
+    sub = df_long[(df_long["year"] == default_year) & (df_long["offence_label"] == offence)]
+    fig.add_trace(
+        go.Box(
+            y=sub["rate"],
+            name=offence,
+            boxpoints="outliers",
+            hovertemplate="Offence: " + offence + "<br>Rate: %{y:.2f}<extra></extra>"
+        )
+    )
+
+buttons = []
+for yr in years:
+    y_values = []
+    for offence in offence_order:
+        sub = df_long[(df_long["year"] == yr) & (df_long["offence_label"] == offence)]
+        y_values.append(sub["rate"].values)
+
+    buttons.append(
+        dict(
+            label=str(yr),
+            method="update",
+            args=[
+                {"y": y_values},
+                {"title": f"Distribution of Neighbourhood Crime Rates by Offence ({yr})"}
+            ]
+        )
+    )
+
+fig.update_layout(
+    title=f"Distribution of Neighbourhood Crime Rates by Offence ({default_year})",
+    yaxis_title="Crime Rate",
+    xaxis_title="Offence Type",
+    updatemenus=[
+        dict(
+            buttons=buttons,
+            direction="down",
+            showactive=True,
+            x=1.02,
+            xanchor="left",
+            y=1.15,
+            yanchor="top"
+        )
+    ],
+    boxmode="group"
+)
+
+fig.show()
+```
+
+**Caption.** Interactive boxplots of neighbourhood crime rates by offence type and year. The dropdown menu allows comparison of how the distribution, spread, and outliers of crime rates vary over time across offence categories.

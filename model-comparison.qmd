@@ -36,3 +36,5 @@ model_compare_df = build_model_compare_df(
 fig = make_model_comparison_chart(model_compare_df)
 fig
 ```
+
+ **Caption.** Interactive comparison of predictive model performance across offence types.

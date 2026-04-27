@@ -11,6 +11,18 @@ execute:
 
 This page shows the neighbourhood crime-profile clusters from the K-means analysis. Hover over a neighbourhood to see its name and cluster.
 
+- Cluster 0 - low overall crime cluster. It has a relatively low overall crime rate compared
+to other clusters.
+
+- Cluster 1 - high property-crime clusters. It has especially high rates of autotheft,
+theftfrommv, and theftover.
+
+- Cluster 2 - extreme biketheft and assault cluster. It stands out sharply from all other
+clusters because it has by far the highest assault rate and an extremely high biketheft rate.
+
+- Cluster 3 - moderately elevated mixed-crime cluster. It has higher rates than Cluster 0
+across most offence types,
+
 ```{python}
 import pandas as pd
 from shared_viz import make_cluster_map
@@ -25,3 +37,5 @@ cluster_assignments = pd.read_csv("data/cluster_assignments.csv")
 m = make_cluster_map(df, cluster_assignments)
 m
 ```
+
+**Caption.** Interactive map of Toronto neighbourhood crime-profile clusters based on multi-year mean offence rates.

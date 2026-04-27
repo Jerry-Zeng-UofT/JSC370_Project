@@ -63,3 +63,5 @@ df_long = df_long[base_cols + ["offence", "year", "rate"]]
 m = make_slope_map(df, df_long)
 m
 ```
+
+**Caption.** Interactive slope map of neighbourhood crime-rate trends by offence type, 2014–2025.

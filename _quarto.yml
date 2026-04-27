@@ -7,6 +7,7 @@ project:
     - slope-map.qmd
     - model-comparison.qmd
     - feature-importance.qmd
+    - interactive-boxplot.qmd
     - "!EDA_Analysis_notebook.qmd"
 
 website:
@@ -23,6 +24,8 @@ website:
         href: model-comparison.qmd
       - text: "Feature Importance"
         href: feature-importance.qmd
+      - text: "Interactive Boxplot"
+        href: interactive-boxplot.qmd
   page-footer:
     center: "Toronto Neighbourhood Crime Analysis"
 

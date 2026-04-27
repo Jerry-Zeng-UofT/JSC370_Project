@@ -26,3 +26,5 @@ importance_df = build_importance_df(rf_importance_df, xgb_importance_df)
 fig = make_feature_importance_chart(importance_df)
 fig
 ```
+
+**Caption.**  Interactive comparison of predictive model performance across offence types.
