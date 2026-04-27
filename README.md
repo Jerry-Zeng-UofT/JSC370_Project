@@ -11,7 +11,7 @@ https://jerry-zeng-uoft.github.io/JSC370_Project/Links to an external site.
 
 Link to the report (also downloadable from the website): 
 
-https://jerry-zeng-uoft.github.io/JSC370_Project/report.pdfLinks to an external site.
+https://jerry-zeng-uoft.github.io/JSC370_Project/report.pdf
 
 Link to the presentation video (files too large to upload directly):
 https://drive.google.com/file/d/1z5eaNOtlgiNmPjXubSUdmxU0MztLiquW/view?usp=sharing Links to an external site.
