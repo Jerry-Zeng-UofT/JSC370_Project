@@ -7,18 +7,19 @@
 
 ### Links
 Link to the website:
-https://jerry-zeng-uoft.github.io/JSC370_Project/Links to an external site.
+https://jerry-zeng-uoft.github.io/JSC370_Project/
 
 Link to the report (also downloadable from the website): 
 
 https://jerry-zeng-uoft.github.io/JSC370_Project/report.pdf
 
 Link to the presentation video (files too large to upload directly):
-https://drive.google.com/file/d/1z5eaNOtlgiNmPjXubSUdmxU0MztLiquW/view?usp=sharing Links to an external site.
+
+https://drive.google.com/file/d/1z5eaNOtlgiNmPjXubSUdmxU0MztLiquW/view?usp=sharing
 
 Link to the GitHub repo:
 
-https://github.com/Jerry-Zeng-UofT/JSC370_Project Links to an external site.
+https://github.com/Jerry-Zeng-UofT/JSC370_Project
 
 ### Instruction of the project repo
 - The website only shows a home page and interactive visualizations in separate pages. The Analysis and the whole project are in the report.
