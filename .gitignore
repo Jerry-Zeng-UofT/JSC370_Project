@@ -4,6 +4,8 @@ __pycache__/
 
 .DS_Store
 
-Final_project/EDA_Analysis_notebook_files/
+/EDA_Analysis_notebook_files/
 
-Final_project/slope-map_files/
+/slope-map_files/
+/.quarto/
+**/*.quarto_ipynb
